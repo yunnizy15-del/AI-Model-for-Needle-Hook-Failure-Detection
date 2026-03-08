@@ -1,76 +1,76 @@
-# Needle Hook Failure Classifier
+# 针钩失效判断模型说明
 
-This project trains a binary classifier from friction-coefficient CSV files:
+本项目基于摩擦系数 CSV 数据训练二分类模型：
 
-- `valid/*.csv` -> label `valid` (normal)
-- `invalid/*.csv` -> label `invalid` (failed)
+- `valid/*.csv` 对应标签 `valid`（正常）
+- `invalid/*.csv` 对应标签 `invalid`（失效）
 
-Each CSV is treated as one sample. The model extracts time-series features from `mu_true` and trains a random forest classifier.
+每个 CSV 文件视为一个样本。程序会从 `mu_true` 序列中提取时序特征，并使用随机森林进行训练。
 
-## 1) Train
+## 1) 训练模型
 
 ```powershell
 python train_model.py
 ```
 
-Outputs:
+输出文件：
 
 - `model/needle_hook_model.joblib`
 - `model/metrics.json`
 
-Optional arguments:
+可选参数示例：
 
 ```powershell
 python train_model.py --valid-dir valid --invalid-dir invalid --test-size 0.2 --n-estimators 500
 ```
 
-## 2) Predict a single CSV
+## 2) 预测单个 CSV
 
 ```powershell
 python predict_model.py --input valid\000001.csv
 ```
 
-## 3) Predict a folder
+## 3) 预测整个文件夹
 
 ```powershell
 python predict_model.py --input invalid --output-csv model\invalid_predictions.csv
 ```
 
-## Notes
-
-- Required columns in CSV: `t_s`, `mu_true`
-- If a few files have shorter length, feature extraction still works.
-
-## 4) GUI (for thesis charts)
+## 4) GUI 界面（论文图表导出）
 
 ```powershell
 python gui_app.py
 ```
 
-If GUI startup reports missing `Tcl/Tk`, reinstall Python with `tkinter` support.
+如果 GUI 启动时报缺少 `Tcl/Tk`，请安装带 `tkinter` 组件的 Python 版本。
 
-GUI features:
+GUI 支持：
 
-- Train model with configurable parameters
-- Predict one CSV or a folder
-- Auto export common paper-ready charts
-- Preview exported charts in the GUI
+- 可配置训练参数
+- 单文件或目录批量预测
+- 自动导出论文常用图表
+- 在界面内预览导出的图表
 
-Training charts:
+训练阶段图表：
 
-- Class distribution
-- Confusion matrix
-- ROC curve
-- PR curve
-- Top feature importance
-- Probability distribution on test set
-- OOB error curve (training-process chart, optional)
+- 类别分布图
+- 混淆矩阵图
+- ROC 曲线
+- PR 曲线
+- 特征重要性 Top 图
+- 测试集失效概率分布图
+- OOB 训练过程误差曲线（可选）
 
-Prediction charts:
+预测阶段图表：
 
-- Predicted class counts
-- Probability histogram
-- Top-risk samples bar chart
-- `mu_mean` vs `mu_std` scatter
-- Risk ranking curve
-- Top-risk signal curve (`t_s` vs `mu_true`)
+- 预测类别计数图
+- 失效概率直方图
+- 高风险样本 Top20 柱状图
+- `mu_mean` 与 `mu_std` 散点图
+- 风险排序曲线
+- 高风险样本信号曲线（`t_s` vs `mu_true`）
+
+## 5) 数据格式要求
+
+- CSV 必须包含列：`t_s`、`mu_true`
+- 即使个别文件长度略短，程序仍可完成特征提取与预测
