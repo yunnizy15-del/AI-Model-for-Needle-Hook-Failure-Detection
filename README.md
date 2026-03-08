@@ -74,3 +74,16 @@ GUI 支持：
 
 - CSV 必须包含列：`t_s`、`mu_true`
 - 即使个别文件长度略短，程序仍可完成特征提取与预测
+
+## 6) PyInstaller 打包
+
+建议先在虚拟环境安装依赖后再打包：
+
+```powershell
+pip install -r requirement.txt
+.\\.venv\\Scripts\\pyinstaller.exe --clean main.spec
+```
+
+打包结果：
+
+- `dist/needle_hook_gui.exe`

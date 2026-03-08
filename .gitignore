@@ -5,3 +5,5 @@ model/
 backupData/
 __pycache__/
 logo.png
+build/
+dist/

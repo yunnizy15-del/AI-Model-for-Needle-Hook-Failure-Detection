@@ -1,10 +1,11 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-from PyInstaller.utils.hooks import collect_data_files
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 
 datas = []
 datas += collect_data_files("matplotlib")
+datas += [("logo.ico", ".")]
 
 
 a = Analysis(
@@ -14,14 +15,17 @@ a = Analysis(
     datas=datas,
     hiddenimports=[
         "tkinter",
-        "tkinter.ttk",
         "matplotlib.backends.backend_tkagg",
-    ],
+    ]
+    + collect_submodules("scipy.stats")
+    + collect_submodules("scipy.special")
+    + collect_submodules("sklearn"),
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
     excludes=[],
-    noarchive=False,
+    noarchive=True,
+    module_collection_mode={"scipy": "py", "sklearn": "pyz"},
     optimize=0,
 )
 pyz = PYZ(a.pure)
@@ -36,7 +40,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,

@@ -2,9 +2,11 @@
 
 import json
 import os
+import sys
 import threading
 import traceback
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
@@ -19,21 +21,44 @@ import numpy as np
 import pandas as pd
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import (
-    accuracy_score,
-    classification_report,
-    confusion_matrix,
-    f1_score,
-    precision_recall_curve,
-    precision_score,
-    recall_score,
-    roc_auc_score,
-    roc_curve,
-)
-from sklearn.model_selection import train_test_split
 
 from needle_hook_features import FEATURE_NAMES, build_dataset, extract_features_from_csv, iter_csv_files, read_signal
+
+
+def resource_path(name: str) -> Path:
+    base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+    return base / name
+
+
+@lru_cache(maxsize=1)
+def get_sklearn_deps() -> dict[str, object]:
+    from sklearn.ensemble import RandomForestClassifier
+    from sklearn.metrics import (
+        accuracy_score,
+        classification_report,
+        confusion_matrix,
+        f1_score,
+        precision_recall_curve,
+        precision_score,
+        recall_score,
+        roc_auc_score,
+        roc_curve,
+    )
+    from sklearn.model_selection import train_test_split
+
+    return {
+        "RandomForestClassifier": RandomForestClassifier,
+        "accuracy_score": accuracy_score,
+        "classification_report": classification_report,
+        "confusion_matrix": confusion_matrix,
+        "f1_score": f1_score,
+        "precision_recall_curve": precision_recall_curve,
+        "precision_score": precision_score,
+        "recall_score": recall_score,
+        "roc_auc_score": roc_auc_score,
+        "roc_curve": roc_curve,
+        "train_test_split": train_test_split,
+    }
 
 
 class App(tk.Tk):
@@ -42,6 +67,8 @@ class App(tk.Tk):
         self.title("针钩失效判断 GUI")
         self.geometry("1380x860")
         self.minsize(1180, 760)
+        self._icon_image = None
+        self._set_app_icon()
 
         self.chart_files: dict[str, Path] = {}
         self.busy = False
@@ -49,6 +76,23 @@ class App(tk.Tk):
         self._init_vars()
         self._build_ui()
         self.log("界面已就绪。")
+
+    def _set_app_icon(self) -> None:
+        ico = resource_path("logo.ico")
+        png = resource_path("logo.png")
+
+        try:
+            if ico.exists():
+                self.iconbitmap(default=str(ico))
+        except Exception:
+            pass
+
+        try:
+            if png.exists():
+                self._icon_image = tk.PhotoImage(file=str(png))
+                self.iconphoto(True, self._icon_image)
+        except Exception:
+            self._icon_image = None
 
     def _init_vars(self) -> None:
         self.train_valid = tk.StringVar(value="valid")
@@ -200,6 +244,7 @@ class App(tk.Tk):
 
     def _train_worker(self) -> None:
         try:
+            sk = get_sklearn_deps()
             valid_dir = Path(self.train_valid.get().strip())
             invalid_dir = Path(self.train_invalid.get().strip())
             model_out = Path(self.train_model.get().strip())
@@ -212,27 +257,46 @@ class App(tk.Tk):
 
             self.log_async("读取数据并提取特征...")
             x, y, paths = build_dataset(valid_dir, invalid_dir)
-            x_train, x_test, y_train, y_test, _, p_test = train_test_split(x, y, paths, test_size=test_size, random_state=random_state, stratify=y)
+            x_train, x_test, y_train, y_test, _, p_test = sk["train_test_split"](
+                x, y, paths, test_size=test_size, random_state=random_state, stratify=y
+            )
 
             self.log_async("训练模型...")
-            model = RandomForestClassifier(n_estimators=n_estimators, random_state=random_state, n_jobs=n_jobs, class_weight="balanced")
+            model = sk["RandomForestClassifier"](
+                n_estimators=n_estimators,
+                random_state=random_state,
+                n_jobs=n_jobs,
+                class_weight="balanced",
+            )
             model.fit(x_train, y_train)
             y_pred = model.predict(x_test)
             y_prob = model.predict_proba(x_test)[:, 1]
-            cm = confusion_matrix(y_test, y_pred)
+            cm = sk["confusion_matrix"](y_test, y_pred)
 
             metrics = {
                 "num_samples_total": int(len(y)),
                 "num_train": int(len(y_train)),
                 "num_test": int(len(y_test)),
                 "class_distribution_total": {"valid": int((y == 0).sum()), "invalid": int((y == 1).sum())},
-                "accuracy": float(accuracy_score(y_test, y_pred)),
-                "precision_invalid": float(precision_score(y_test, y_pred, pos_label=1, zero_division=0)),
-                "recall_invalid": float(recall_score(y_test, y_pred, pos_label=1, zero_division=0)),
-                "f1_invalid": float(f1_score(y_test, y_pred, pos_label=1, zero_division=0)),
-                "roc_auc": float(roc_auc_score(y_test, y_prob)),
+                "accuracy": float(sk["accuracy_score"](y_test, y_pred)),
+                "precision_invalid": float(
+                    sk["precision_score"](y_test, y_pred, pos_label=1, zero_division=0)
+                ),
+                "recall_invalid": float(
+                    sk["recall_score"](y_test, y_pred, pos_label=1, zero_division=0)
+                ),
+                "f1_invalid": float(
+                    sk["f1_score"](y_test, y_pred, pos_label=1, zero_division=0)
+                ),
+                "roc_auc": float(sk["roc_auc_score"](y_test, y_prob)),
                 "confusion_matrix": cm.tolist(),
-                "classification_report": classification_report(y_test, y_pred, target_names=["valid", "invalid"], output_dict=True, zero_division=0),
+                "classification_report": sk["classification_report"](
+                    y_test,
+                    y_pred,
+                    target_names=["valid", "invalid"],
+                    output_dict=True,
+                    zero_division=0,
+                ),
             }
 
             model_out.parent.mkdir(parents=True, exist_ok=True)
@@ -247,8 +311,9 @@ class App(tk.Tk):
         except Exception:
             self.after(0, self._worker_fail, "训练失败", traceback.format_exc())
 
-    def _train_charts(self, chart_dir: Path, y: np.ndarray, y_test: np.ndarray, y_pred: np.ndarray, y_prob: np.ndarray, cm: np.ndarray, model: RandomForestClassifier, x_train: np.ndarray, y_train: np.ndarray, random_state: int, n_estimators: int) -> dict[str, Path]:
+    def _train_charts(self, chart_dir: Path, y: np.ndarray, y_test: np.ndarray, y_pred: np.ndarray, y_prob: np.ndarray, cm: np.ndarray, model: object, x_train: np.ndarray, y_train: np.ndarray, random_state: int, n_estimators: int) -> dict[str, Path]:
         charts: dict[str, Path] = {}
+        sk = get_sklearn_deps()
 
         counts = [int((y == 0).sum()), int((y == 1).sum())]
         fig = Figure(figsize=(6, 4), dpi=120); ax = fig.add_subplot(111)
@@ -264,13 +329,13 @@ class App(tk.Tk):
         fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
         p = chart_dir / "02_confusion_matrix.png"; fig.tight_layout(); fig.savefig(p, dpi=220); charts["训练-混淆矩阵"] = p
 
-        fpr, tpr, _ = roc_curve(y_test, y_prob)
+        fpr, tpr, _ = sk["roc_curve"](y_test, y_prob)
         fig = Figure(figsize=(5, 4), dpi=120); ax = fig.add_subplot(111)
-        ax.plot(fpr, tpr, label=f"AUC={roc_auc_score(y_test, y_prob):.4f}"); ax.plot([0, 1], [0, 1], "--", color="gray")
+        ax.plot(fpr, tpr, label=f"AUC={sk['roc_auc_score'](y_test, y_prob):.4f}"); ax.plot([0, 1], [0, 1], "--", color="gray")
         ax.set_title("ROC"); ax.set_xlabel("FPR"); ax.set_ylabel("TPR"); ax.legend(loc="lower right")
         p = chart_dir / "03_roc_curve.png"; fig.tight_layout(); fig.savefig(p, dpi=220); charts["训练-ROC"] = p
 
-        precision, recall, _ = precision_recall_curve(y_test, y_prob)
+        precision, recall, _ = sk["precision_recall_curve"](y_test, y_prob)
         fig = Figure(figsize=(5, 4), dpi=120); ax = fig.add_subplot(111)
         ax.plot(recall, precision, color="#F58518"); ax.set_title("PR曲线"); ax.set_xlabel("Recall"); ax.set_ylabel("Precision")
         p = chart_dir / "04_pr_curve.png"; fig.tight_layout(); fig.savefig(p, dpi=220); charts["训练-PR"] = p
@@ -290,7 +355,15 @@ class App(tk.Tk):
         if self.use_oob.get():
             step = max(1, int(self.oob_step.get().strip()))
             points, errs = [], []
-            rf = RandomForestClassifier(n_estimators=step, warm_start=True, oob_score=True, bootstrap=True, class_weight="balanced", random_state=random_state, n_jobs=1)
+            rf = sk["RandomForestClassifier"](
+                n_estimators=step,
+                warm_start=True,
+                oob_score=True,
+                bootstrap=True,
+                class_weight="balanced",
+                random_state=random_state,
+                n_jobs=1,
+            )
             self.log_async("计算OOB训练过程曲线...")
             for n in range(step, n_estimators + 1, step):
                 rf.set_params(n_estimators=n); rf.fit(x_train, y_train)
