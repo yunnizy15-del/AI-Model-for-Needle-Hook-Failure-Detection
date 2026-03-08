@@ -3,3 +3,5 @@ valid/
 model/
 .vscode/
 backupData/
+__pycache__/
+logo.png
